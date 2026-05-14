@@ -11,6 +11,14 @@ import {
 
 import { pricingConfig } from "../config/pricingConfig";
 
+import { calculateShipping } from "./calculateShipping";
+import { calculateVolumeDiscount } from "./calculateVolumeDiscount";
+import { calculateLoyaltyDiscount } from "./calculateLoyaltyDiscount";
+import { capDiscounts } from "./capDiscounts";
+import { calculateTax } from "./calculateTax";
+import { calculateCurrencyRate } from "./calculateCurrencyRate";
+import { calculateHandling } from "./calculateHandling";
+
 export function calculateCustomerReports(data: InputData): ReportResult {
   const { customers, products, orders, promotions, shippingZones } = data;
 
@@ -54,9 +62,9 @@ export function calculateCustomerReports(data: InputData): ReportResult {
 
       if (promotion.active) {
         if (promotion.type === "PERCENTAGE") {
-          discountRate = Number(promotion.value) / 100;
+          discountRate = parseFloat(promotion.value) / 100;
         } else if (promotion.type === "FIXED") {
-          fixedDiscount = Number(promotion.value);
+          fixedDiscount = parseFloat(promotion.value);
         }
       }
     }
@@ -85,9 +93,12 @@ export function calculateCustomerReports(data: InputData): ReportResult {
     }
 
     totalsByCustomer[customerId].subtotal += lineTotal;
+
     totalsByCustomer[customerId].weight +=
       (product?.weight || 1.0) * order.quantity;
+
     totalsByCustomer[customerId].items.push(order);
+
     totalsByCustomer[customerId].morningBonus += morningBonus;
   }
 
@@ -106,132 +117,43 @@ export function calculateCustomerReports(data: InputData): ReportResult {
     const customerTotals = totalsByCustomer[customerId];
     const subtotal = customerTotals.subtotal;
 
-    let volumeDiscount = 0;
-
-    if (subtotal > 50) {
-      volumeDiscount = subtotal * 0.05;
-    }
-
-    if (subtotal > 100) {
-      volumeDiscount = subtotal * 0.1;
-    }
-
-    if (subtotal > 500) {
-      volumeDiscount = subtotal * 0.15;
-    }
-
-    if (subtotal > 1000 && level === "PREMIUM") {
-      volumeDiscount = subtotal * 0.2;
-    }
-
     const firstOrderDate = customerTotals.items[0]?.date || "";
-    const dayOfWeek = firstOrderDate ? new Date(firstOrderDate).getDay() : 0;
 
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
-      volumeDiscount = volumeDiscount * 1.05;
-    }
+    let volumeDiscount = calculateVolumeDiscount(
+      subtotal,
+      level,
+      firstOrderDate,
+    );
 
-    let loyaltyDiscount = 0;
-    const points = loyaltyPoints[customerId] || 0;
+    let loyaltyDiscount = calculateLoyaltyDiscount(
+      loyaltyPoints[customerId] || 0,
+    );
 
-    if (points > 100) {
-      loyaltyDiscount = Math.min(points * 0.1, 50);
-    }
+    const cappedDiscounts = capDiscounts(volumeDiscount, loyaltyDiscount);
 
-    if (points > 500) {
-      loyaltyDiscount = Math.min(points * 0.15, 100);
-    }
-
-    let totalDiscount = volumeDiscount + loyaltyDiscount;
-
-    if (totalDiscount > pricingConfig.maxDiscount) {
-      totalDiscount = pricingConfig.maxDiscount;
-
-      const ratio =
-        pricingConfig.maxDiscount / (volumeDiscount + loyaltyDiscount);
-
-      volumeDiscount = volumeDiscount * ratio;
-      loyaltyDiscount = loyaltyDiscount * ratio;
-    }
+    const totalDiscount = cappedDiscounts.totalDiscount;
+    volumeDiscount = cappedDiscounts.volumeDiscount;
+    loyaltyDiscount = cappedDiscounts.loyaltyDiscount;
 
     const taxable = subtotal - totalDiscount;
 
-    let tax = 0;
+    const tax = calculateTax(taxable, customerTotals.items, products);
 
-    let allTaxable = true;
-
-    for (const item of customerTotals.items) {
-      const product: Product | undefined = products[item.productId];
-
-      if (product && product.taxable === false) {
-        allTaxable = false;
-        break;
-      }
-    }
-
-    if (allTaxable) {
-      tax = Math.round(taxable * pricingConfig.taxRate * 100) / 100;
-    } else {
-      for (const item of customerTotals.items) {
-        const product: Product | undefined = products[item.productId];
-
-        if (product && product.taxable !== false) {
-          const itemTotal = item.quantity * (product.price || item.unitPrice);
-
-          tax += itemTotal * pricingConfig.taxRate;
-        }
-      }
-
-      tax = Math.round(tax * 100) / 100;
-    }
-
-    let shipping = 0;
     const weight = customerTotals.weight;
 
-    if (subtotal < pricingConfig.freeShippingLimit) {
-      const shippingZone: ShippingZone = shippingZones[zone] || {
-        zone,
-        base: pricingConfig.defaultShipping,
-        perKg: 0.5,
-      };
+    const shippingZone: ShippingZone = shippingZones[zone] || {
+      zone,
+      base: pricingConfig.defaultShipping,
+      perKg: 0.5,
+    };
 
-      const baseShipping = shippingZone.base;
+    const shipping = calculateShipping(subtotal, weight, zone, shippingZone);
 
-      if (weight > 10) {
-        shipping = baseShipping + (weight - 10) * shippingZone.perKg;
-      } else if (weight > 5) {
-        shipping = baseShipping + (weight - 5) * 0.3;
-      } else {
-        shipping = baseShipping;
-      }
-
-      if (zone === "ZONE3" || zone === "ZONE4") {
-        shipping = shipping * 1.2;
-      }
-    } else {
-      if (weight > 20) {
-        shipping = (weight - 20) * 0.25;
-      }
-    }
-
-    let handling = 0;
     const itemCount = customerTotals.items.length;
 
-    if (itemCount > 10) {
-      handling = pricingConfig.handlingFee;
-    }
+    const handling = calculateHandling(itemCount);
 
-    if (itemCount > 20) {
-      handling = pricingConfig.handlingFee * 2;
-    }
-
-    let currencyRate = 1;
-
-    if (currency === "USD") {
-      currencyRate = pricingConfig.currencyRates.USD;
-    } else if (currency === "GBP") {
-      currencyRate = pricingConfig.currencyRates.GBP;
-    }
+    const currencyRate = calculateCurrencyRate(currency);
 
     const total =
       Math.round((taxable + tax + shipping + handling) * currencyRate * 100) /
@@ -257,7 +179,7 @@ export function calculateCustomerReports(data: InputData): ReportResult {
       itemCount,
 
       total,
-      loyaltyPoints: Math.floor(points),
+      loyaltyPoints: Math.floor(loyaltyPoints[customerId] || 0),
     });
   }
 
