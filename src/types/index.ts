@@ -60,13 +60,23 @@ export interface CurrencyRates {
 export interface CustomerReport {
   customerId: string;
   name: string;
+  level: string;
+  zone: string;
+  currency: string;
+
   subtotal: number;
-  discount: number;
+  totalDiscount: number;
+  volumeDiscount: number;
+  loyaltyDiscount: number;
+  morningBonus: number;
+
   tax: number;
   shipping: number;
   handling: number;
+  weight: number;
+  itemCount: number;
+
   total: number;
-  currency: string;
   loyaltyPoints: number;
 }
 

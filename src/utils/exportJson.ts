@@ -28,5 +28,5 @@ export function exportJson(basePath: string, data: CustomerReport[]): void {
   fs.writeFileSync(outputPath, json, "utf-8");
 
   // 5   — Log console
-  console.log(`OK JSON exporté : ${outputPath}`);
+  // console.log(`OK JSON exporté : ${outputPath}`);
 }

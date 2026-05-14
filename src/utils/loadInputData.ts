@@ -9,10 +9,10 @@ import { loadPromotions } from "./loadPromotions";
 export function loadInputData(basePath: string): InputData {
   // 1 .Définir les chemins fichiers
   const customersPath = path.join(basePath, "data", "customers.csv");
-  console.log(customersPath);
+  // console.log(customersPath);
 
   const productsPath = path.join(basePath, "data", "products.csv");
-  console.log(productsPath);
+  // console.log(productsPath);
 
   const ordersPath = path.join(basePath, "data", "orders.csv");
 
@@ -31,10 +31,9 @@ export function loadInputData(basePath: string): InputData {
   // console.log(orders);
 
   const shippingZones = loadShippingZones(shippingZonesPath);
-  // console.log(shippingZones);
 
   const promotions = loadPromotions(promotionsPath);
-  // console.log(promotions);
+
   return {
     customers,
     products,

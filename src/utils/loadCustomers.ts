@@ -15,7 +15,7 @@ export function loadCustomers(filePath: string) {
       name: parts[1],
       level: parts[2],
       shippingZone: parts[3],
-      currency: parts[4],
+      currency: parts[4] || "EUR",
     };
   }
 

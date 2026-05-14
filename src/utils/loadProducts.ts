@@ -22,7 +22,7 @@ export function loadProducts(filePath: string) {
       name: parts[1],
       category: parts[2],
       price: parseFloat(parts[3]),
-      weight: parseFloat(parts[4]),
+      weight: parseFloat(parts[4] || "1.0"),
       taxable: parts[5] === "true",
     };
   }

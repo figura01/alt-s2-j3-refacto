@@ -20,7 +20,7 @@ export function run(): string {
 
   exportJson(basePath, report.reports);
 
-  // console.log(textOutput);
+  console.log(textOutput);
 
   return textOutput; //;
 }
